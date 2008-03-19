@@ -1,6 +1,6 @@
 Summary:  Hflow data Coalsesing 
 Name: hflow
-Version: 1.99.21
+Version: 1.99.22
 Release: 1
 License: GPL
 Group:   Applications/Honeynet
