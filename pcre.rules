@@ -1,0 +1,63 @@
+#this is a comment... (does this work?)
+# ok this is the format:
+# rule-set-id client server pcre-string protocolnum min-packets max-packets min-bytes-max-bytes
+# Where:
+# rule-set-id   0-7      This means what rule is being specified
+# client:       0 or 1   if needs to match on the client connection.
+# server:       0 or 1   if need to match on the server path
+# pcre-string:  string   The pcre string to match.. no spaces allowed
+# protocol num  0-255    Th ip protocol number for this rule to match
+# minpackets    0-64K    The converstion must be in its nth packet for the rule to start matchin
+# maxpackets    0-64K    The conversation will not be matches after te nth packet 
+#
+# Tor handshake.. we could start with \x16...
+#0 1 0 ^\x16(.|\n){10,200}1.0(.|\n){8}[TtorOR]{3}1.{5}U.{4}([a-zA-Z0-9]{1,19})\s(?:<identity>|<signing>) 6 4 30 20 4000
+0 1 0 ^\x16(?:.|\n)+?[TORtor\s]{3,6}.{4,20}[a-zA-Z0-9]{1,19}\s(?:<identity>|<signing>) 6 4 30 20 4000
+0 0 1 ^\x16(?:.|\n)+?[TtorOR\s]{3,6}.{4,20}[a-zA-Z0-9]{1,19}\s(?:<identity>|<signing>) 6 4 30 20 4000
+
+#HTTP The extra long size for the reply is to be able to consume 'post and put operations'
+1 1 0 ^(GET|POST|HEAD|PUT|DELETE|CONNECT)\s\S+(?:\sHTTP/1.|$) 6 4 10 10 2000
+1 0 1 ^(?:HTTP/1.\d\s\d{3}|[A-Z]+\s200\sOK) 6 5 50 10 7000
+##1 0 1 200 6 4 14 10 6000
+
+#SSH (needs to be fixed)
+2 1 0 ^SSH-\d.\d{1,3}-\S{1,4} 6 4 10 10 500
+2 0 1 ^SSH-\d.\d{1,3}-\S{1,4} 6 4 10 10 500
+
+#IRC...agin fix is needed
+3 1 0 ^(PASS|NICK|USER)\s\S+ 6 4 16 10 1000
+#3 0 1 ^(NOTICE|:\S{1,30})\s  6 4 20 10 2500
+3 0 1 ^(NOTICE|:[a-z0-9\.]{1,40})\s  6 4 80 10 3000
+
+##FTP control.. will no do data
+4 1 0 ^(AUTH|USER)\s\S+ 6 4 10 10 500
+4 0 1 ^2\d0\s\S+        6 4 10 10 1000
+
+#SSL
+5 1 0 ^(?:\x16\x03(?:\x01|\x00)..\x01|.{2}\x01\x03(?:\x01|\x00)) 6 4 10 10 4000
+5 0 1 ^\x16\x03(?:\x01|\x00)..\x02 6 4 10 10 4000
+
+#P2P (edonkey|GNUTELLA)
+6 1 0 ^(\xe3....\x01|GNUTELLA\sCONNECT) 6 4 14 10 1000
+6 0 1 ^(\xe3....(\x38|\x4c)|GNUTELLA(/0.\d+)?\s(OK|200)) 6 4 14 10 2000
+
+#P2P bittorrent (make them smaller)
+7 1 0 ^\x13BitTorrent\sprotocol 6 4 10 10 2000
+#7 0 1 ^\x13BitTorrent\sprotocol 6 4 10 10 2000
+7 0 1 ^\x13BitTorren 6 4 10 10 2000
+
+##other IRC | jabber | AIM lets see!!
+8 1 0 ^(?:IRCVERS\s\S+|<\?xml\sversion='1\.\d'\?><stream:stream\sxmlns=(?:"|')jabber:client|\x2a\x01....\x00\x00\x00)  6 4 10 10 2000
+8 0 1 ^(?:ENCRYPT\s\S+|<\?xml\sversion='1\.\d'\?><stream:stream\sxmlns=(?:"|')jabber:client|\x2a\x02....\x00\x01\x00\x03)  6 5 14 10 5000
+
+#other trans(CVS)
+9 1 0 ^BEGIN\sAUTH\sREQUEST\n(.+\n)*END\sAUTH 6 4 10 10 3000
+9 0 1 ^Valid-requests  6 4 10 10 6000
+
+#this is stange.. try not to see any ascii data
+#this is a nasty catcher... will try to match all protocols that
+#dont unse any ascii or numeric hello
+#9 1 0 ^(?<!\x16\x03\x01.|[A-Z\d\s\-]{4}|\x13Bit|\xe3...).{96,750} 6 4 10 10 1800
+#9 0 1 ^(?<!\x16\x03\x01.|[A-Z\-]{4}|\x13Bit|\xe3...|2\d{2}\s).{96,750} 6 4 10 10 1800
+###9 0 1 ^.{0,200}\w{5,} 6 5 10 10 2000
+ 

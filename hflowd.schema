@@ -1,0 +1,385 @@
+#--------------------------------------------------------------------
+#----- $Header$
+#--------------------------------------------------------------------
+#
+# Copyright (C) 2001 - 2006 The Honeynet Project.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. All advertising materials mentioning features or use of this software
+#    must display the following acknowledgement:
+#      This product includes software developed by The Honeynet Project.
+# 4. The name "The Honeynet Project" may not be used to endorse or promote
+#    products derived from this software without specific prior written
+#    permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+
+
+use mysql;
+
+#--- create the databases we use
+CREATE DATABASE hflow;
+
+#--- new "root" account
+#GRANT ALL ON *.* TO 'roo'@'localhost' IDENTIFIED BY 'honey' WITH GRANT OPTION;
+
+
+#---user for writing data to database
+#GRANT SELECT,INSERT,UPDATE  ON  *.* TO hflow@localhost identified by 'honey';
+
+#-- whack other users and update permissions
+#delete from user where User!='roo' AND User!='hflow' AND User!='admin' AND User!='walleye';
+#flush privileges;
+
+USE hflow;
+
+CREATE TABLE dbschema(
+         version        INT UNSIGNED NOT NULL,
+         comment        CHAR(250),
+         PRIMARY KEY (version));
+
+CREATE TABLE sensor (
+	sensor_id	INT	UNSIGNED NOT NULL,
+	install_sec	INT	UNSIGNED NOT NULL,
+	last_upd_sec	INT	UNSIGNED NOT NULL,
+	state           ENUM('offline','online','maint'),
+	
+	name		TINYTEXT,
+	timezone	INT,
+	country_code	CHAR(2),
+	latitude	INT,
+	longitude	INT,
+	notes		TEXT,
+
+	network_type	ENUM('com','edu','gov','mil','home'),
+	access_via      INT        NOT NULL DEFAULT 0,
+        login           CHAR(30),
+        passwd          CHAR(30),
+
+
+	PRIMARY KEY( sensor_id)
+);
+
+#this table is not used.. left here to make sure things are ok
+CREATE TABLE argus (
+	sensor_id 	INT	   UNSIGNED NOT NULL,	
+        argus_id      	INT        UNSIGNED NOT NULL AUTO_INCREMENT,
+
+        ip_proto        TINYINT    UNSIGNED NOT NULL,
+
+	#---- flag to indicate if source was "behind" the sensor
+	#---- need to record this pre obfuscation 
+	local		BOOL	   DEFAULT FALSE,
+
+        src_ip          INT        UNSIGNED NOT NULL,
+        dst_ip          INT        UNSIGNED NOT NULL,
+        src_port        SMALLINT   UNSIGNED NOT NULL,
+        dst_port        SMALLINT   UNSIGNED NOT NULL,
+
+        src_pkts        INT        UNSIGNED NOT NULL,
+        dst_pkts        INT        UNSIGNED NOT NULL,
+        src_bytes       INT        UNSIGNED NOT NULL,
+        dst_bytes       INT        UNSIGNED NOT NULL,
+
+        start_sec       INT        UNSIGNED NOT NULL,
+        end_sec         INT        UNSIGNED NOT NULL,
+
+
+        argus_dir       CHAR(3),
+        argus_status    CHAR(3),
+        argus_ind       CHAR(3),
+
+        client_os_id    INT        UNSIGNED,
+
+
+        PRIMARY KEY   (sensor_id, argus_id),
+	KEY (sensor_id,client_os_id),
+	KEY (sensor_id,start_sec),
+	KEY (sensor_id,end_sec),
+	KEY (sensor_id,src_ip),
+	KEY (sensor_id,dst_ip),
+	KEY (sensor_id,start_sec,src_ip,dst_ip),
+	KEY (sensor_id,end_sec)
+);
+
+CREATE TABLE flow (
+        sensor_id       INT        UNSIGNED NOT NULL DEFAULT 0,
+        flow_id         INT        UNSIGNED NOT NULL AUTO_INCREMENT,
+        src_ip          INT        UNSIGNED NOT NULL,
+        dst_ip          INT        UNSIGNED NOT NULL,
+        src_port        SMALLINT   UNSIGNED NOT NULL,
+        dst_port        SMALLINT   UNSIGNED NOT NULL,
+        ip_proto        TINYINT    UNSIGNED NOT NULL,
+
+        iface_in        TINYINT    UNSIGNED NOT NULL,
+        marker_flags	INT	   UNSIGNED NOT NULL DEFAULT 0,
+
+        src_start_sec       INT         UNSIGNED NOT NULL,
+        src_start_msec      SMALLINT    UNSIGNED NOT NULL,
+        src_end_sec         INT         UNSIGNED NOT NULL,
+        src_end_msec        SMALLINT    UNSIGNED NOT NULL,
+        src_packets         INT         UNSIGNED NOT NULL,
+        src_bytes           INT         UNSIGNED NOT NULL,
+        src_ip_flags        TINYINT     UNSIGNED NOT NULL,
+        src_tcp_flags       TINYINT     UNSIGNED NOT NULL,
+        src_icmp_packets    SMALLINT    UNSIGNED NOT NULL,
+        src_icmp_seen       SMALLINT    UNSIGNED NOT NULL,
+
+        dst_start_sec       INT         UNSIGNED NOT NULL,
+        dst_start_msec      SMALLINT    UNSIGNED NOT NULL,
+        dst_end_sec         INT         UNSIGNED NOT NULL,
+        dst_end_msec        SMALLINT    UNSIGNED NOT NULL,
+        dst_packets         INT         UNSIGNED NOT NULL,
+        dst_bytes           INT         UNSIGNED NOT NULL,
+        dst_ip_flags        TINYINT     UNSIGNED NOT NULL,
+        dst_tcp_flags       TINYINT     UNSIGNED NOT NULL,
+        dst_icmp_packets    SMALLINT    UNSIGNED NOT NULL,
+        dst_icmp_seen       SMALLINT    UNSIGNED NOT NULL,
+
+        client_os_id        INT         UNSIGNED NOT NULL DEFAULT 0,
+        server_os_id	    INT 	UNSIGNED NOT NULL DEFAULT 0,
+
+        PRIMARY KEY   ( sensor_id,flow_id ),
+        INDEX src_ip_idx  (sensor_id,src_ip),
+        INDEX dst_ip_idx  ( sensor_id,dst_ip),
+        INDEX src_port_idx  ( sensor_id,src_port),
+        INDEX dst_port_idx  ( sensor_id,dst_port),
+        INDEX start_sec_idx ( sensor_id,src_start_sec),
+        UNIQUE INDEX sens_src_ip_dst_ip_proto_src_port_dst_port_start_sec(sensor_id,src_ip,dst_ip,ip_proto,src_port,dst_port,src_start_sec)
+);
+
+CREATE TABLE flow_perf(
+	sensor_id           INT		UNSIGNED NOT NULL DEFAULT 0,
+	flow_id             INT		UNSIGNED NOT NULL DEFAULT 0,
+        sec                 INT         UNSIGNED NOT NULL ,
+        bytes               INT         UNSIGNED NOT NULL DEFAULT 0,
+        packets		    INT		UNSIGNED NOT NULL DEFAULT 0,
+       		
+        PRIMARY KEY   ( sensor_id,flow_id,sec )
+); 
+
+
+
+
+
+CREATE TABLE os(
+        os_id           INT     UNSIGNED NOT NULL AUTO_INCREMENT,
+	sensor_id	INT	UNSIGNED NOT NULL,
+
+        genre           CHAR(20),
+        detail          CHAR(40),
+
+	#---- with multiple sensors, we'll have redundant data
+        PRIMARY KEY(os_id,sensor_id)
+);
+
+CREATE TABLE ids(
+        ids_id          INT        UNSIGNED NOT NULL AUTO_INCREMENT,
+	sensor_id	INT	   UNSIGNED NOT NULL,
+
+        sig_id          INT        NOT NULL DEFAULT 0,
+        flow_id        INT        NOT NULL DEFAULT 0,
+        sec             INT        NOT NULL DEFAULT 0,
+        usec            INT        NOT NULL DEFAULT 0,
+        priority        INT        NOT NULL DEFAULT 10,
+        sig_rev         INT        NOT NULL DEFAULT 10,
+        sig_gen         INT        NOT NULL DEFAULT 0,
+        classification  INT        NOT NULL DEFAULT 0,
+        type            ENUM('CLIENT','SERVER'),
+
+	#--to keep related data and delete based on argus flow
+	to_be_deleted	TINYINT	   UNSIGNED NOT NULL DEFAULT 0,
+
+
+        PRIMARY KEY (sensor_id,ids_id),
+	KEY (sensor_id,flow_id)
+);
+
+CREATE TABLE ids_sig (
+        ids_sig_gen     TINYINT    UNSIGNED NOT NULL ,
+        ids_sig_id      INT        UNSIGNED NOT NULL ,
+        sensor_id       INT        UNSIGNED NOT NULL,
+
+
+        sig_name        CHAR(255),
+        reference       TEXT,
+
+        #----- with multiple sensors do we have assurance
+        #----- that the sig id will be consistent?
+        #----- for now lets just accept redundancy
+        PRIMARY KEY (sensor_id, ids_sig_gen, ids_sig_id)
+);
+
+
+
+CREATE TABLE process (
+	sensor_id	  INT	     UNSIGNED NOT NULL,
+        process_id	  INT        UNSIGNED AUTO_INCREMENT,
+
+	src_ip            INT        UNSIGNED NOT NULL,           
+
+        time_min          INT        NOT NULL,		
+        time_max          INT        NOT NULL,	
+	pcap_time_min     INT        NOT NULL,	
+        pcap_time_max     INT        NOT NULL,			
+
+        pid               INT        UNSIGNED NOT NULL,
+
+     
+        PRIMARY KEY   (sensor_id, process_id),
+	KEY (sensor_id,time_min),          
+	KEY (sensor_id,time_max),          
+	KEY (sensor_id,src_ip),
+	KEY (sensor_id,pid)
+);
+
+
+CREATE TABLE sbk_loss (
+	sensor_id	INT  	  UNSIGNED NOT NULL,
+	src_ip          INT       UNSIGNED NOT NULL,
+	time            INT       NOT NULL,
+	lost            INT       UNSIGNED NOT NULL
+);
+
+CREATE TABLE process_tree (
+	sensor_id	INT	   UNSIGNED NOT NULL,
+	child_process	INT        UNSIGNED NOT NULL,
+	parent_process  INT        UNSIGNED NOT NULL,
+
+	to_be_deleted	TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+	PRIMARY KEY (sensor_id, child_process,parent_process),
+	KEY (sensor_id, parent_process)
+);
+
+
+CREATE TABLE command (
+	sensor_id	INT	   UNSIGNED NOT NULL,
+	command_id      INT        UNSIGNED AUTO_INCREMENT,
+	
+	name     	TINYTEXT   NOT NULL,
+
+	PRIMARY KEY ( sensor_id, command_id )	
+);
+
+
+CREATE TABLE process_to_com (
+	sensor_id	INT	   UNSIGNED NOT NULL,
+	process_id      INT	   UNSIGNED NOT NULL,  
+	command_id  	INT        UNSIGNED NOT NULL, 
+
+	to_be_deleted	TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+
+	PRIMARY KEY (sensor_id,command_id, process_id),
+	KEY(sensor_id, command_id)
+);
+
+CREATE TABLE sys_open (
+	sensor_id	INT	   UNSIGNED NOT NULL,
+	sys_open_id	INT	   UNSIGNED AUTO_INCREMENT,
+	process_id      INT        UNSIGNED NOT NULL, 
+        uid             INT        NOT NULL,
+        pcap_time       INT,
+        time            INT   NOT NULL,
+        counter         INT        UNSIGNED NOT NULL,
+        filed           INT        UNSIGNED NOT NULL,
+	inode           INT        UNSIGNED NOT NULL,
+        length          INT        UNSIGNED NOT NULL,
+
+	to_be_deleted	TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+
+        filename        TINYTEXT,
+	PRIMARY KEY (sensor_id,sys_open_id),
+	KEY (sensor_id, process_id)
+);
+
+
+CREATE TABLE sys_read (
+	sensor_id	INT	   UNSIGNED NOT NULL,
+        sys_read_id     INT        UNSIGNED AUTO_INCREMENT,
+        process_id      INT        UNSIGNED NOT NULL, 
+        uid             INT        NOT NULL,
+        pcap_time       INT,
+        time            INT        NOT NULL,
+        counter         INT        UNSIGNED NOT NULL,
+        filed           INT        UNSIGNED NOT NULL,
+	inode           INT        UNSIGNED NOT NULL,
+        length          INT        UNSIGNED NOT NULL,
+        data            BLOB,
+
+	to_be_deleted	TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+        PRIMARY KEY   (sensor_id, process_id, sys_read_id)
+);
+
+CREATE TABLE sys_write (
+        sensor_id       INT        UNSIGNED NOT NULL,
+        sys_write_id     INT        UNSIGNED AUTO_INCREMENT,
+        process_id      INT        UNSIGNED NOT NULL,
+        uid             INT        NOT NULL,
+        pcap_time       INT,
+        time            INT        NOT NULL,
+        counter         INT        UNSIGNED NOT NULL,
+        filed           INT        UNSIGNED NOT NULL,
+        inode           INT        UNSIGNED NOT NULL,
+        length          INT        UNSIGNED NOT NULL,
+        data            BLOB,
+
+        to_be_deleted   TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+        PRIMARY KEY   (sensor_id, process_id, sys_write_id)
+);
+
+
+
+CREATE TABLE sys_socket(
+	sensor_id	INT	   UNSIGNED NOT NULL,
+	sys_socket_id	INT	   UNSIGNED AUTO_INCREMENT,
+	process_id	INT	   UNSIGNED NOT NULL, 
+        pcap_time       INT,           
+        time            INT        NOT NULL,
+	uid             INT        NOT NULL,		       
+        counter         INT        UNSIGNED NOT NULL,
+        filed           INT        UNSIGNED NOT NULL,
+	inode           INT        UNSIGNED NOT NULL,
+  	flow_id        INT        UNSIGNED NOT NULL,
+	`call`            SMALLINT   UNSIGNED NOT NULL,
+	type	        TINYTEXT,
+
+	to_be_deleted	TINYINT    UNSIGNED NOT NULL DEFAULT 0,
+
+
+	PRIMARY KEY   (sensor_id, sys_socket_id ),
+    	KEY (sensor_id, flow_id ),
+	KEY (sensor_id, process_id)
+);	
+
+check table command,flow,ids,ids_sig,os,process,process_to_com,process_tree,sbk_loss,dbschema,sensor, sys_read,sys_open,sys_socket,sys_write;
+
+INSERT INTO dbschema (version,comment) values (3,'initial hflow2 release 1.99.15');
+GRANT ALL PRIVILEGES ON hflow.* TO 'hflowdaemon'@'localhost';
+
+GRANT SELECT, CREATE TEMPORARY TABLES ON hflow.* TO 'walleye'@'localhost' identified by 'honey';
+#GRANT ALL SELECT, CREATE TEMPORARY TABLES ON hflow.* TO 'walleye'@'localhost';
+FLUSH PRIVILEGES;

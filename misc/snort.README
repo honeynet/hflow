@@ -1,0 +1,35 @@
+Hlfow requires a special patch to detect correctly how snort is working.
+This patch allows for removing the size limits on snort files and by
+usable selecting that the output data for the unified log is not appended 
+with the unix epoch.
+
+We have patches for snort versions 2.4.5, 2.6.0 and 2.6.1.5.
+
+There are two procedures to build snort with the patch, that depend
+if you are using pure rpm (Installing hflow from RPMS) or if you
+are not using rpms.
+
+
+1. If you are not using RPMS:
+   a. Download snort from snort.org (One of the versions with patches)
+   b. Untar your file and validate it's signature
+   c. Copy the appropiate patch file to the root of the tarbal.
+   d. run, from the root directory of the tarball:
+        >>patch -p0 < snort-VERSION-spo_unified.c.patch
+   e. configure, make and install hflow...
+
+2. If you are using RPMS this will build the rpm of the patched version of snort
+    (I will assume that rpmbuild is installed and it is working)
+   a. Download snort from snort.org (One of the versions with patches)
+   b. Validate its signature and copy the file to the SOURCES direcory for rpmbuild
+   c. Copy the appropiate patch file to the SOURCES direcory for rpmbuild
+   d. Copy the inline configuration source to the SOURCES directory of rpmbuild
+   e. From this direcory run:
+       >>rpmbuild -ba snort.spec
+   f. Install the patched verion of snort (I am assuming you know how to do this)
+
+   g. Build the hflow rpm
+      >>rpmbuild -ta hflow-VERSION.tar.gz
+   h. Install hflow.
+
+

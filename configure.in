@@ -1,0 +1,217 @@
+AC_INIT(hflow.cpp)
+AM_INIT_AUTOMAKE(hflow,1.99.21)
+AM_CONFIG_HEADER(config.h)
+
+
+AC_CANONICAL_HOST
+
+AM_PROG_CC_STDC
+
+AC_PROG_CXX
+if test -n "$GCC"; then
+    CFLAGS="$CFLAGS -Wall "
+fi
+
+
+case "$host" in
+  *-linux*)
+    linux=yes
+    AC_DEFINE(LINUX)
+    AC_SUBST(extra_include)
+    extra_include=-I/usr/include/pcap
+    ;;
+  *-openbsd*)
+    AC_DEFINE(OPENBSD)
+    ;;
+  *-solaris*)
+    AC_DEFINE(SOLARIS)
+    ;;
+
+  *-freebsd*)
+    AC_DEFINE(FREEBSD)
+    ;;
+  *-bsdi*)
+    AC_DEFINE(BSDI)
+    ;;
+  *-apple*)
+    AC_DEFINE(MACOS)
+esac
+
+case "$host" in
+  *i686*)
+dnl #--    CPPFLAGS="${CPPFLAGS} -march=i686"
+    ;;
+  *-solaris*)
+    AC_DEFINE(SOLARIS)
+    ;;
+esac
+
+if test -n "$target"; then 
+  AC_CANONICAL_TARGET
+  #CPPFLAGS="${CPPFLAGS} -march=${target_cpu} "
+fi 
+
+
+
+dnl #----- check for presence of LIBPCAP
+
+AC_ARG_WITH(libpcap_includes,
+    [  --with-libpcap-includes=DIR  libpcap include directory],
+    [with_libpcap_includes="$withval"],[with_libpcap_includes=no])
+
+AC_ARG_WITH(libpcap_libraries,
+    [  --with-libpcap-libraries=DIR  libpcap library directory],
+    [with_libpcap_libraries="$withval"],[with_libpcap_libraries=no])
+
+if test "$with_libpcap_includes" != "no"; then
+   CPPFLAGS="${CPPFLAGS} -I${with_libpcap_includes}"
+fi
+if test "$with_libpcap_libraries" != "no"; then
+   LDFLAGS="${LDFLAGS}  -L${with_libpcap_libraries}"
+fi
+
+LPCAP=""
+AC_CHECK_LIB(pcap, pcap_datalink,, LPCAP="no")
+
+if test "$LPCAP" = "no"; then
+  echo
+  echo "   ERROR!  Libpcap library/headers not found, go get it from"
+  echo "   ftp://ftp.ee.lbl.gov/libpcap.tar.Z"
+  echo "   or use the --with-libpcap-* options, if you have it installed"
+  echo "   in unusual place"
+  exit
+fi
+
+
+dnl #----- check for presence of pthreads
+
+AC_ARG_WITH(libpthread_includes,
+    [  --with-libpthread-includes=DIR  libpthread include directory],
+    [with_libpthread_includes="$withval"],[with_libpthread_includes=no])
+
+AC_ARG_WITH(libpthread_libraries,
+    [  --with-libpthread-libraries=DIR  libpthread library directory],
+    [with_libpthread_libraries="$withval"],[with_libpthread_libraries=no])
+
+if test "$with_libpthread_includes" != "no"; then
+   CPPFLAGS="${CPPFLAGS} -I${with_libpthread_includes}"
+fi
+if test "$with_libpthread_libraries" != "no"; then
+   LDFLAGS="${LDFLAGS}  -L${with_libpthread_libraries}"
+fi
+
+LPTHREAD=""
+AC_CHECK_LIB(pthread, pthread_create,, LPTHREAD="no")
+
+if test "$LDPTHREAD" = "no"; then
+  echo
+  echo "   ERROR! pthread library/headers not found, go get it from"
+  echo "   http:// dont know where to get pthreads "
+  echo "   or use the --with-libpthreadi-* options, if you have it installed"
+  echo "   in unusual place"
+  exit
+fi
+
+dnl #----- check for dl?
+
+
+LIBDL=""
+AC_CHECK_LIB(dl, dlopen, LIBDL=-ldl) 
+AC_SUBST(LIBDL)
+LDFLAGS="${LDFLAGS} -ldl"
+
+dnl #----- check for presence of DBI
+
+AC_ARG_WITH(libdbi_includes,
+    [  --with-libdbi-includes=DIR  libdbi include directory],
+    [with_libdbi_includes="$withval"],[with_libdbi_includes=no])
+
+AC_ARG_WITH(libdbi_libraries,
+    [  --with-libdbi-libraries=DIR  libdbi library directory],
+    [with_libdbi_libraries="$withval"],[with_libdbi_libraries=no])
+
+if test "$with_libdbi_includes" != "no"; then
+   CPPFLAGS="${CPPFLAGS} -I${with_libdbi_includes}"
+fi
+if test "$with_libdbi_libraries" != "no"; then
+   LDFLAGS="${LDFLAGS}  -L${with_libdbi_libraries}"
+fi
+
+LDBI=""
+AC_CHECK_LIB(dbi, dbi_conn_query,, LDBI="no")
+
+if test "$LDBI" = "no"; then
+  echo
+  echo "   ERROR! DBI library/headers not found, go get it from"
+  echo "   http://libdbi.sourceforge.net/download.php"
+  echo "   or use the --with-libdbi-* options, if you have it installed"
+  echo "   in unusual place"
+  exit
+fi
+
+##########
+dnl #----- check for presence of PCRE
+
+AC_ARG_WITH(libpcre_includes,
+    [  --with-libpcre-includes=DIR  libpcre include directory],
+    [with_libpcre_includes="$withval"],[with_libpcre_includes=no])
+
+AC_ARG_WITH(libpcre_libraries,
+    [  --with-libpcre-libraries=DIR  libpcre library directory],
+    [with_libpcre_libraries="$withval"],[with_libpcre_libraries=no])
+
+if test "$with_libpcre_includes" != "no"; then
+   CPPFLAGS="${CPPFLAGS} -I${with_pcre_includes}"
+fi
+if test "$with_libpcre_libraries" != "no"; then
+   LDFLAGS="${LDFLAGS}  -L${with_pcre_libraries}"
+fi
+
+HPCRE=""
+AC_CHECK_HEADER(pcre.h,,HPCRE="no",[#include <pcre.h>] )
+
+if test "$HPCRE" = "XX"; then
+  echo
+  echo "   ERROR! PCRE headers not found, go get it from"
+  echo "   http://www.pcre.org/"
+  echo "   or use the --with-libpcre-* options, if you have it installed"
+  echo "   in unusual place"
+  exit
+fi
+AC_CHECK_HEADER([pcre.h],
+                     [AC_DEFINE([HAVE_PRCE_H], [1],
+                        [Define to 1 if you have <pcre.h>.])],
+                     )
+AC_SUBST(HAVE_PCRE_H)
+AC_CHECK_HEADER([pcre/pcre.h],
+                     [AC_DEFINE([HAVE_PCRE_PRCE_H], ,
+                        [Define to 1 if you have <pcre/pcre.h>.])],
+                     )
+AC_SUBST(HAVE_PCRE_PCRE_H)
+
+
+
+
+
+LPCRE=""
+AC_CHECK_LIB(pcre, pcre_compile,, LPCRE="no")
+
+if test "$LPCRE" = "no"; then
+  echo
+  echo "   ERROR! PCRE library/headers not found, go get it from"
+  echo "   http://www.pcre.org/"
+  echo "   or use the --with-libpcre-* options, if you have it installed"
+  echo "   in unusual place"
+  exit
+fi
+
+###
+
+
+INCLUDES='$(extra_include)'
+
+AC_SUBST(INCLUDES)
+
+AC_PROG_INSTALL
+AC_OUTPUT(Makefile)
+

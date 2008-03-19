@@ -1,0 +1,103 @@
+#!/bin/bash
+# p0f		This shell script takes care of starting and stopping
+#		the p0f monitoring program
+#
+# $Id: hflow-p0f 2582 2006-02-01 15:24:02Z cvs $
+#
+# chkconfig: 2345 65 48
+# description: hflow - the netowork data colasesing program. \
+# hlow performs passive OS fingerprinting technique bases on information coming \
+# processname: hflow
+# pidfile: /var/run/hflow/p0f.pid
+
+# hacked by Camilo Viecco from hflow-p0f (by edb?)
+
+PATH=/usr/bin:/sbin:/bin:/usr/sbin
+export PATH
+
+# Source function library.
+. /etc/rc.d/init.d/hwfuncs.sub
+. /etc/rc.d/init.d/functions
+
+if [ $(hw_isconfigured) -eq 0 ]; then
+	exit 1
+fi
+
+# Source config info
+hw_setvars
+
+
+#conditional stuff
+if [ "${HwSEBEK_DST_PORT}"X = "X" ]; then
+   SEBEK_PARMS=""
+else
+   SEBEK_PARMS="-k ${HwSEBEK_DST_PORT}"
+fi
+
+
+
+##
+P0F_SOCK=/var/run/p0f-sock
+PIDFILE=/var/run/hflow/hflow.pid
+LOG_DIR=/var/log/hflow
+
+case "$1" in
+start)
+        # 
+        echo -n $"Starting hflow"
+	# Since p0f self-backgrounds, via forking, you cannot get its
+	# pid as a result of $!.  Instead, we're going to have to use
+	# "pidof" (same mechanism used by "status" from
+	# /etc/rc.d/init.d/functions)
+	cd /etc/hflow
+	/usr/bin/hflow -D -i ${HwLAN_IFACE} -p ${PIDFILE} -d 1   \
+		-s ${HwSENSOR_ID} -z _hflow -L ${LOG_DIR}       \
+                 ${SEBEK_PARMS}
+	if [ $? -eq 0 ]; then
+	  success; echo
+	else
+	   failure; echo
+	fi
+	;;
+
+stop)
+	if [ -f $PIDFILE ]; then
+		action $"Stopping hflow: " /bin/true
+		kill -TERM `cat $PIDFILE`
+		rm -f $PIDFILE
+		rm -f /var/lock/subsys/p0f
+	else
+		action $"Stopping hflow: " /bin/false
+	fi
+	;;
+
+restart)
+	$0 stop
+	$0 start
+	exit $?
+	;;
+
+status)
+	# "status" seems to prefer "pidof" to the pidfile, so let's
+	# avoid its use here.
+	#status p0f
+	if [ -f $PIDFILE ]; then
+		echo "hflow (pid `cat $PIDFILE`) is running"
+	else
+		echo "hflow is not running"
+	fi
+	exit $?
+	;;
+
+probe)
+	exit 0
+	;;
+
+*)
+	echo "Usage: $0 {start|stop|status|restart}"
+	exit 1
+	;;
+
+esac
+
+exit 0

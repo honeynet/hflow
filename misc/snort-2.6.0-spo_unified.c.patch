@@ -1,0 +1,222 @@
+--- src/output-plugins/spo_unified.c	2006-05-12 13:19:56.000000000 -0400
++++ spo_unified.c.cam	2007-07-20 10:02:39.000000000 -0400
+@@ -154,6 +154,7 @@
+     FILE *stream;
+     unsigned int limit;
+     unsigned int current;
++    int appendepoch;
+ } UnifiedConfig;
+ 
+ typedef struct _FileHeader
+@@ -294,13 +295,22 @@
+     if(data == NULL)
+         FatalError("SpoUnified: Unable to get context data\n");
+ 
+-    if(*(data->filename) == '/')
+-        value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
+-                (unsigned long)curr_time);
+-    else
+-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
+-                data->filename, (unsigned long)curr_time);
+-
++    if(data->appendepoch==1){
++        LogMessage("with appendepoch\n");
++        if(*(data->filename) == '/')
++            value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
++                    (unsigned long)curr_time);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
++                    data->filename, (unsigned long)curr_time);
++        }
++    else{
++        LogMessage("no append epoch!\n");
++        if(*(data->filename) == '/')
++            value = snprintf(logdir, STD_BUF, "%s", data->filename);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s", pv.log_dir,data->filename);
++        }
+     if(value == -1)
+         FatalError("SpoUnified: filepath too long\n");
+ 
+@@ -467,12 +477,12 @@
+     /* backward compatibility stuff */
+     if(dHdr == NULL)
+     {
+-        if((data->current + sizeof(UnifiedAlert)) > data->limit)
++        if(((data->current + sizeof(UnifiedAlert)) > data->limit) && (data->limit !=-1)) 
+             UnifiedAlertRotateFile(data);
+     }
+     else
+     {
+-        if((data->current + sizeof(UnifiedAlert)) > data->limit)
++        if(((data->current + sizeof(UnifiedAlert)) > data->limit) &&(data->limit !=-1))
+             UnifiedRotateFile(data);
+     }
+ 
+@@ -565,14 +575,14 @@
+     /* backward compatibility stuff */
+     if(dHdr == NULL)
+     {
+-        if((data->current + sizeof(UnifiedLog) + logheader.pkth.caplen) > 
+-                data->limit)
++        if(((data->current + sizeof(UnifiedLog) + logheader.pkth.caplen) > 
++                data->limit) && (data->appendepoch==1) )
+             UnifiedLogRotateFile(data);
+     }
+     else
+     {   
+-        if((data->current + sizeof(UnifiedLog) + sizeof(DataHeader) 
+-                    + logheader.pkth.caplen) > data->limit)
++        if(((data->current + sizeof(UnifiedLog) + sizeof(DataHeader) 
++                    + logheader.pkth.caplen) > data->limit) && (data->appendepoch==1))
+             UnifiedRotateFile(data);
+     }
+     if(dHdr)
+@@ -625,18 +635,18 @@
+     /* backward compatibility stuff */
+     if(unifiedData->dHdr == NULL)
+     {
+-        if((unifiedData->data->current +
++        if(((unifiedData->data->current +
+             sizeof(UnifiedLog)+
+             unifiedData->logheader->pkth.caplen) > 
+-            unifiedData->data->limit)
++            unifiedData->data->limit)   &&(unifiedData->data->appendepoch==1))
+         {
+             UnifiedLogRotateFile(unifiedData->data);
+         }
+     }
+     else
+     {   
+-        if((unifiedData->data->current + sizeof(UnifiedLog) + sizeof(DataHeader) 
+-                    + unifiedData->logheader->pkth.caplen) > unifiedData->data->limit)
++        if(((unifiedData->data->current + sizeof(UnifiedLog) + sizeof(DataHeader) 
++                    + unifiedData->logheader->pkth.caplen) > unifiedData->data->limit)  &&(unifiedData->data->appendepoch==1))
+             UnifiedRotateFile(unifiedData->data);
+     }
+ 
+@@ -755,6 +765,7 @@
+ {
+     UnifiedConfig *tmp;
+     int limit = 0;
++    int appendepoch=1;
+ 
+     tmp = (UnifiedConfig *)calloc(sizeof(UnifiedConfig), sizeof(char));
+ 
+@@ -801,6 +812,26 @@
+                             file_name, file_line, index);
+                 }
+             }
++
++            if(strcasecmp("appendepoch", stoks[0]) == 0)
++            {
++                if(num_stoks > 1 && appendepoch == 1)
++                {
++                    appendepoch = atoi(stoks[1]);
++                    if (appendepoch!=0 && appendepoch!=1){
++                      appendepoch=0;
++                    }
++                    LogMessage("appendepochvalue=%d \n",appendepoch);
++                }
++                else
++                {
++                    LogMessage("Argument Error in %s(%i): %s\n",
++                            file_name, file_line, index);
++                }
++            }
++
++
++
+             mSplitFree(&stoks, num_stoks);
+         }
+         mSplitFree(&toks, num_toks);
+@@ -822,9 +853,19 @@
+     }
+ 
+     /* convert the limit to "MB" */
+-    tmp->limit = limit << 20;
++    if(appendepoch==1){
++      tmp->limit = limit << 20;
++    }
++    else{
++      LogMessage("spo_unified file with no limit size!\n");
++      tmp->limit=-1;
++    }
++    /*put appendepoch*/
++    tmp->appendepoch=appendepoch;
++    
+ 
+     return tmp;
++
+ }
+ 
+ 
+@@ -917,12 +958,22 @@
+     bzero(logdir, STD_BUF);
+     curr_time = time(NULL);
+ 
+-    if(data->filename[0] == '/')
+-        value = snprintf(logdir, STD_BUF, "%s.%lu",  data->filename, 
+-                (unsigned long)curr_time);
+-    else
+-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
+-                data->filename, (unsigned long)curr_time);
++    if (data->appendepoch==1){
++        if(data->filename[0] == '/')
++            value = snprintf(logdir, STD_BUF, "%s.%lu",  data->filename, 
++                    (unsigned long)curr_time);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
++                    data->filename, (unsigned long)curr_time);
++       }
++   else{
++        if(data->filename[0] == '/')
++            value = snprintf(logdir, STD_BUF, "%s",  data->filename);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s", pv.log_dir,
++                    data->filename);
++   }
++
+ 
+     if(value == -1)
+     {
+@@ -1043,13 +1094,21 @@
+         FatalError("Can't get unified plugin context, that's bad\n");
+     }
+ 
+-    if(*(data->filename) == '/')
+-        value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
+-                (unsigned long)curr_time);
+-    else
+-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
+-                data->filename, (unsigned long)curr_time);
+-
++    if (data->appendepoch==1){
++        if(*(data->filename) == '/')
++            value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
++                    (unsigned long)curr_time);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
++                    data->filename, (unsigned long)curr_time);
++        }
++    else{
++        if(*(data->filename) == '/')
++            value = snprintf(logdir, STD_BUF, "%s", data->filename);
++        else
++            value = snprintf(logdir, STD_BUF, "%s/%s", pv.log_dir,
++                    data->filename);
++    }
+     if(value == -1)
+     {
+         FatalError("unified log file logging path and file name are "
+@@ -1285,8 +1344,8 @@
+             logheader.pkth.pktlen = 0;
+         }
+ 
+-        if((data->current + sizeof(UnifiedLog) + logheader.pkth.caplen) > 
+-                data->limit)
++        if(((data->current + sizeof(UnifiedLog) + logheader.pkth.caplen) > 
++                data->limit) &&(data->appendepoch==1))
+             UnifiedLogRotateFile(data);
+ 
+         fwrite((char*)&logheader, sizeof(UnifiedLog), 1, data->stream);
