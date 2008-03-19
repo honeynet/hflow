@@ -9,6 +9,7 @@ misc/snort-2.6.0-spo_unified.c.patch \
 misc/snort-2.6.1.5-spo_unified.c.patch \
 misc/sid_map_upload.pl \
 misc/gen_map_upload.pl \
+misc/makesensor_id.pl \
 misc/snort.README \
 misc/snort.spec.hflow\
 misc/roo1_2_hflow2update.pl\

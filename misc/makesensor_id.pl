@@ -68,8 +68,9 @@ sub main{
   #$print_val .=" days=$days_since_epoch \n";
   #print(" hello '$print_val'");
   #print ("hello");
-  $print_val=inet_ntoa(pack('N',$sensor_id));
-  print $fh $print_val or die "cannot write to file";
+  #$print_val=inet_ntoa(pack('N',$sensor_id));
+  #print $fh $print_val or die "cannot write to file";
+  print $fh $sensor_id or die "cannot write to file";
 
 }
 
