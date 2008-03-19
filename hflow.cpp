@@ -328,18 +328,30 @@ int main(int argc,char **argv)
     if ((0==input_type) || (1==input_type)){
          //pcap_out.initialize(outname,pcap_in.get_linktype());
          pcap_out.initialize_with_rotate(outname,file_extension,file_limit,pcap_in.get_linktype());
-         bpf_filter.initialize(1,bpf_filter_string,pcap_in.get_linktype());
+         //bpf_filter.initialize(1,bpf_filter_string,pcap_in.get_linktype());
           
     }
     if (2==input_type) {
          //pcap_out.initialize(outname,ulog_in.get_linktype());
          pcap_out.initialize_with_rotate(outname,file_extension,file_limit,ulog_in.get_linktype());
-         bpf_filter.initialize(1,bpf_filter_string,ulog_in.get_linktype());
+         //bpf_filter.initialize(1,bpf_filter_string,ulog_in.get_linktype());
 
     }
     if(true==pcap_out.live_read) pcap_out.set_non_blocking();
 
- } 
+ }
+ if(NULL!=bpf_filter_string){
+    switch(input_type){
+        case 0:
+        case 1:
+           bpf_filter.initialize(1,bpf_filter_string,pcap_in.get_linktype());
+           break;
+        case 2:
+           bpf_filter.initialize(1,bpf_filter_string,ulog_in.get_linktype());
+           break;
+    }
+ }
+ 
  //initialize snort block first!!!(actually does not matter in linux/or solaris)
  //snort_block.initialize(1);
  if (use_snort){
