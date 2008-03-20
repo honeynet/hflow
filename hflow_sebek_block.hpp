@@ -900,14 +900,14 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
                                          ntohl(sbk_header->counter),ntohl(sbk_header->fd),
                                            ntohl(sbk_header->inode), flow_id,ntohs(in_record->call));
 
-  /*
+  
    result=dbi_conn_query(conn,query);
    if(!result){
        fprintf(stderr,"%s\n",query);
        perror("problem on insert new sys_socket name "); exit(1);
        } 
    rvalue=dbi_result_free(result);
-  */
+  
    
    return 1;
 }
