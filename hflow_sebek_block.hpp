@@ -53,6 +53,7 @@
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include "bidir_flow_maker_block.hpp"
 
 #define MAX_HONEYPOTS 4
 #define MAX_PROCESS_ID 32769
@@ -212,6 +213,7 @@ class Hflow_Sebek_Block: public Processing_Block{
     pthread_mutex_t in_queue_mutex;
     sem_t queue_sem;
     sem_t done_sem;
+    sem_t queue_size_sem;
     volatile bool input_done;
     dbi_conn conn;
     u_int16_t sebek_dst_port;
@@ -223,13 +225,14 @@ class Hflow_Sebek_Block: public Processing_Block{
     struct timespec delay;
     unsigned int last_process_db_id;
     int do_sys_socket_v3(unsigned int process_id,const sebek_v3_socket_record *in_record,const struct sebek_v3_header *sbk_header,unsigned int pcap_sec,char *out_query);
-
+    Bidir_Flow_Maker_Block *flow_maker;
 
   public:
     inline int entry_point(const Tagged_Element *in_packet){return entry_point((Tagged_IP_Packet *) in_packet);};
     int entry_point(const Tagged_IP_Packet *in_packet);
     int set_output_point(Processing_Block *out_block);
     int set_output_point(Processing_Block *,int out_index);
+    int set_flow_maker(Bidir_Flow_Maker_Block *in_maker){flow_maker=in_maker; return 0;};
     int do_version3(const struct Tagged_IP_Packet *in_packet);
     int do_version3(const struct ip *ip_header,const struct sebek_v3_header *sbk_header,const unsigned int pcap_sec);
     int initialize(int numoutputs);
@@ -261,6 +264,7 @@ Hflow_Sebek_Block::Hflow_Sebek_Block(){
    delay.tv_nsec=0;
    hpots_used=0;
    last_process_db_id=0;
+   flow_maker=NULL;
    input_done=false;
 };
 
@@ -378,7 +382,8 @@ int Hflow_Sebek_Block::initialize(int in_numoutputs,char* dbtype, char* dbname, 
   rvalue=sem_init(&done_sem,0, 0);
   if(-1==rvalue){perror("cannot initialize semaphore in hflow_sebek"); exit(1);}
 
- 
+  rvalue=sem_init(&queue_size_sem,0, 80);
+  if(-1==rvalue){perror("cannot initialize semaphore in hflow_sebek"); exit(1);}
 
   //create the new thread
   rvalue=pthread_create(&sebek_processing_thread,NULL,hflow_sebek_thread_func,(void*)this);
@@ -401,6 +406,9 @@ int Hflow_Sebek_Block::entry_point(const Tagged_IP_Packet *in_packet){
 
   ///processs here:
    if(is_sebek_packet(in_packet)){
+      if(false==live_read){
+         rvalue=sem_wait(&queue_size_sem);
+      }
       //fprintf(stderr,"-");
      //copy packet....
      //classic push stuff into queue in a critial protected region
@@ -519,6 +527,10 @@ int Hflow_Sebek_Block::internal_collector(){
            }
         }
         else{last_warn_size=0; current_delay.tv_nsec=0;}
+
+       if(false==live_read){
+          rvalue=sem_post(&queue_size_sem);
+       }
 
     }
 normal_end:
@@ -692,7 +704,7 @@ int Hflow_Sebek_Block::do_version3(const struct ip *ip_header,const struct sebek
    command_iter=name2command_id_cache.find(scom); 
    if(name2command_id_cache.end()==command_iter){
         snprintf(query,SBK_MAX_QUERY_SIZE-1,"SELECT command_id FROM  command"
-                                            " WHERE sensor_id=%u AND name='%s'",
+                                            " WHERE sensor_id=%u AND name='%s' LIMIT 1",
                                              sensor_id,scom.name);
         //the previous assumes no quotes on the name.....
         result=dbi_conn_query(conn,query);
@@ -718,7 +730,7 @@ int Hflow_Sebek_Block::do_version3(const struct ip *ip_header,const struct sebek
 
             // and a select..again
             snprintf(query,SBK_MAX_QUERY_SIZE-1,"SELECT command_id FROM  command"
-                                            " WHERE sensor_id=%u AND name='%s'",
+                                            " WHERE sensor_id=%u AND name='%s' LIMIT 1",
                                              sensor_id,scom.name);
             result=dbi_conn_query(conn,query);
             if(!result){
@@ -756,6 +768,9 @@ int Hflow_Sebek_Block::do_version3(const struct ip *ip_header,const struct sebek
        process_db[hpot_id][ntohl(sbk_header->pid)].command_id=name2command_id_cache[scom];
 
    }  
+   
+ 
+
    //--- now we switch on the sebek type...
    // sys read-- do nothing.. 
    // sys_open-- insert into db
@@ -789,6 +804,7 @@ int Hflow_Sebek_Block::do_version3(const struct ip *ip_header,const struct sebek
        case 2: //sys_socket
                sbk_socket= (sebek_v3_socket_record *)(((u_char*) sbk_header)+sizeof(struct sebek_v3_header));
                rvalue=do_sys_socket_v3(process_db_id,sbk_socket,sbk_header, pcap_sec,query); 
+               //rvalue=0;
                break;
        case 3: //sys open
                memset(open_name,0x00,128);
@@ -836,7 +852,42 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
    int rvalue; 
    unsigned int flow_id=0;
    struct timespec delay;
+   Tagged_IPV4_Flow flow;
 
+   if(0==in_record->sip || 
+      0==in_record->dip || 
+     (0x7f0000==(ntohl(in_record->sip)>>8) && 0x7f0000==(ntohl(in_record->dip)>>8) )){
+      goto insert_sys_socket;     
+   }
+   //now try to do the insert
+/*
+   if(NULL!=flow_maker){
+      memset(&flow,0x00,sizeof( Tagged_IPV4_Flow));
+      flow.protocol=in_record->proto;
+      switch(ntohs(in_record->call)){
+
+         case 10: //recv
+         case 12: //recv_from 
+         case 5: //accept 
+           flow.source_ip= ntohl(in_record->dip); //remote
+           flow.dest_ip  = ntohl(in_record->sip); //local
+           flow.src_port=  ntohs(in_record->dport);
+           flow.dst_port=  ntohs(in_record->sport);
+           break;
+         default:
+           flow.dest_ip  = ntohl(in_record->dip);
+           flow.source_ip= ntohl(in_record->sip);
+           flow.dst_port = ntohs(in_record->dport);
+           flow.src_port = ntohs(in_record->sport);
+      }
+      //fprintf(stderr,"call=%d ",ntohs(in_record->call));
+      //Flow_helpers::print_flow(&flow);
+      //fprintf(stderr,"call=%d \n",ntohs(in_record->call));
+      flow.stats.src.start_time=pcap_sec;
+      flow_maker->DB_add_emit_flow_if_not_exists(&flow,pcap_sec);
+      //sleep(1);
+   }
+*/
    do{
       //I should actually make the query depending on the sycall number....
        snprintf(query,SBK_MAX_QUERY_SIZE-1,"SELECT flow_id,GREATEST(src_end_sec,dst_end_sec) as etime FROM flow "
@@ -847,10 +898,10 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
                                                 "src_port=%u and dst_port=%u)) "
                                          "HAVING etime>=%u "
                                          "ORDER BY src_start_sec limit 1",
-                                          sensor_id,in_record->proto,pcap_sec,
+                                          sensor_id,in_record->proto,pcap_sec+5,
                                           ntohl(in_record->sip),ntohl(in_record->dip),ntohs(in_record->sport),ntohs(in_record->dport),
                                           ntohl(in_record->dip),ntohl(in_record->sip),ntohs(in_record->dport),ntohs(in_record->sport)
-                                          ,pcap_sec );
+                                          ,pcap_sec-1 );
 
         result=dbi_conn_query(conn,query);
         if(!result){
@@ -862,13 +913,44 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
                flow_id=dbi_result_get_long(result, "flow_id");
             }
         else{
+            //try to insert!!
+            if(NULL!=flow_maker && 0==iterations){
+               memset(&flow,0x00,sizeof( Tagged_IPV4_Flow));
+               flow.protocol=in_record->proto;
+               switch(ntohs(in_record->call)){
+                  case 10: //recv
+                  case 12: //recv_from
+                  case 5: //accept
+                     flow.source_ip= ntohl(in_record->dip); //remote
+                     flow.dest_ip  = ntohl(in_record->sip); //local
+                     flow.src_port=  ntohs(in_record->dport);
+                     flow.dst_port=  ntohs(in_record->sport);
+                    break;
+                  default:
+                     flow.dest_ip  = ntohl(in_record->dip);
+                     flow.source_ip= ntohl(in_record->sip);
+                     flow.dst_port = ntohs(in_record->dport);
+                     flow.src_port = ntohs(in_record->sport);
+               }
+               //fprintf(stderr,"call=%d ",ntohs(in_record->call));
+               //Flow_helpers::print_flow(&flow);
+               //fprintf(stderr,"call=%d \n",ntohs(in_record->call));
+               flow.stats.src.start_time=pcap_sec;
+               flow.stats.src.end_time=pcap_sec;
+               flow_maker->DB_add_emit_flow_if_not_exists(&flow,pcap_sec);
+               //sleep(1)
+
+           }
+
+            
+
             //was not found,sleep for a while
             // this is suboptimal,.. yes..... 
             // need to add dynamically way to change this...
-            delay.tv_sec=0;
-            delay.tv_nsec=2000000;
-            //rvalue=nanosleep(&delay,NULL);
             do{
+               delay.tv_sec=0;
+               delay.tv_nsec=200000000;
+            //rvalue=nanosleep(&delay,NULL);
                rvalue=nanosleep(&delay,NULL);
             }while(rvalue!=0 && EINTR==errno);
 
@@ -879,17 +961,20 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
         rvalue=dbi_result_free(result);   
         iterations++;
        //if some condition then wait
-     }while(iterations<2);
+     }while(iterations<4);
    #ifdef VERBOSE
    fprintf(stderr,"sebek socket iterations=%d\n",iterations);
    #endif
    if(0==flow_id){
-      #ifdef VERBOSE
+      //#ifdef VERBOSE
       fprintf(stderr,"query='%s'",query);
       perror("Sebek_socket: unable tofind "); //exit(1);
-      #endif
+      Flow_helpers::print_flow(&flow);
+      fprintf(stderr,"call=%d \n",ntohs(in_record->call));
+      //#endif
       return 0;
       }
+  insert_sys_socket:
    //now do the insert...
    snprintf(out_query,SBK_MAX_QUERY_SIZE-1,"INSERT DELAYED INTO sys_socket "
                                        "(sensor_id,process_id,pcap_time,time,uid,"
@@ -901,9 +986,9 @@ int Hflow_Sebek_Block::do_sys_socket_v3(unsigned int process_id,const sebek_v3_s
                                            ntohl(sbk_header->inode), flow_id,ntohs(in_record->call));
 
   
-   result=dbi_conn_query(conn,query);
+   result=dbi_conn_query(conn,out_query);
    if(!result){
-       fprintf(stderr,"%s\n",query);
+       fprintf(stderr,"%s\n",out_query);
        perror("problem on insert new sys_socket name "); exit(1);
        } 
    rvalue=dbi_result_free(result);

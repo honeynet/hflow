@@ -140,7 +140,7 @@ int main(int argc,char **argv)
  FILE *pid_file;
  char *run_username=NULL;
  struct passwd *pw;
- uint16_t sebek_dst_port;
+ uint16_t sebek_dst_port=1101;
 
        /* set up the handler */
         if (signal(SIGINT, sigint_handler) == SIG_ERR) {
@@ -369,6 +369,7 @@ int main(int argc,char **argv)
 
  //sebek_block.initialize(1);
  sebek_block.set_dst_port(sebek_dst_port);
+ sebek_block.set_flow_maker(&flow_maker);
  sebek_block.initialize(1,database_type,database_name,database_user,"",sensor_id);
  //snort_block.initialize(1);
  p0f_block.initialize(1,database_type,database_name,database_user,"",sensor_id);
@@ -389,7 +390,9 @@ int main(int argc,char **argv)
  }
  snort_block.set_output_point(&p0f_block);
  p0f_block.set_output_point(&sebek_block);
-sebek_block.set_output_point(&pcre_block);
+
+ sebek_block.set_output_point(&marker_filter_block);
+ //sebek_block.set_output_point(&pcre_block);
  //sebek_block.set_output_point(&entropy_block);
 
 // pcre_block.set_output_point(&marker_filter_block);

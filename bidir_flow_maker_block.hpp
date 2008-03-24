@@ -26,6 +26,7 @@
 #include "active_ipv4_flow_db.hpp"
 #include <map>
 #include <list>
+#include <pthread.h>
 
 #define BIDIR_FLOW_NUM_QUEUES 2
 
@@ -61,6 +62,7 @@ class Bidir_Flow_Maker_Block: public Processing_Block{
     int inserted_in_last_sec;
     int num_olds_for_deletion;
     LPF1 old_rem_filter;
+    pthread_mutex_t db_mutex;
 public:
     list<Tagged_IPV4_Flow> data_rep[BIDIR_FLOW_NUM_QUEUES];
     list<Flow_db_Tags> tag_list;
@@ -76,6 +78,7 @@ public:
     Bidir_Flow_Maker_Block();
     ~Bidir_Flow_Maker_Block();
     int emit_all_flows();
+    int DB_add_emit_flow_if_not_exists(Tagged_IPV4_Flow *in_flow,unsigned int sec);
   private:
     inline int emit_old_or_update(Tagged_IPV4_Flow *dest, Tagged_IPV4_Flow *source,
                            Active_flow_indexer *current, unsigned int sec);
@@ -128,11 +131,16 @@ Bidir_Flow_Maker_Block::Bidir_Flow_Maker_Block(){
 /////
 int Bidir_Flow_Maker_Block::initialize(int in_numoutputs){
   int i;
+  int rvalue;
   next_stage =new Processing_Block*[in_numoutputs];
   num_outputs=in_numoutputs;
   for(i=0;i<num_outputs;i++){
      next_stage[i]=NULL;
   }
+  rvalue=pthread_mutex_init(&db_mutex,NULL);
+  if(0!=rvalue){perror("cannot initialize mutex in bidir flow maker"); exit(1);}
+
+
   initialized=true;
   valid_outputs=0;
   return 0;
@@ -154,7 +162,11 @@ int Bidir_Flow_Maker_Block ::entry_point( Tagged_Packet *in_packet){
 
 
   //process..:  
+  rvalue=pthread_mutex_lock(&db_mutex);
+  if(0!=rvalue){perror("Bidir flow maker: error on mutex lock, "); exit(1);};
   DB_updater(local);
+  rvalue=pthread_mutex_unlock(&db_mutex);
+  if(0!=rvalue){perror("Bidir Flow maker: error on mutex un lock,"); exit(1);};
 
   // call each valid output
   for(i=0;i<valid_outputs;i++){
@@ -172,7 +184,7 @@ int Bidir_Flow_Maker_Block ::entry_point( Tagged_Packet *in_packet){
          (packet_count<16 && (packet_count & 0x1 ==0x1))||
          (packet_count<256 && (packet_count & 0xF ==0x1))||
          (last_flow_emit!=in_packet->pcap_hdr->ts.tv_sec) || 
-         (packet_count & 0xFF)==0x1){ //period part
+         (packet_count & 0x7FF)==0x1){ //period part
           //fprintf(stderr,"/");
           //if(last_flow_emit!=in_packet->pcap_hdr->ts.tv_sec){
           //    fprintf(stderr,".");
@@ -302,7 +314,74 @@ int Bidir_Flow_Maker_Block::print_index(){
 
 
 ////////////////////////////////////////////////////////////
+int Bidir_Flow_Maker_Block::DB_add_emit_flow_if_not_exists(Tagged_IPV4_Flow *in_flow,unsigned int sec){
+   //// assumes we know what side is forward!
+   map<Active_flow_indexer,list<Tagged_IPV4_Flow>::iterator>::iterator position;
+   Active_flow_indexer current;
+  int rvalue=0;
+  int rvalue2;      
+  Tagged_IPV4_Flow temp_flow;
+  list<Tagged_IPV4_Flow>::iterator local,local2;
+  int dest_queue,current_queue;
 
+  current.create_from_flow(in_flow);
+  rvalue=pthread_mutex_lock(&db_mutex);
+  if(0!=rvalue){perror("Bidir flow maker: error on mutex lock, "); exit(1);};
+   
+  position=index.find(current);
+  if(index.end()==position ){ //not found, insert!
+
+     //need to add one, in the fast position one
+     current.flow_from_index(&temp_flow);
+     temp_flow.stats.src.start_time=sec;
+     temp_flow.stats.src.end_time=sec;
+     data_rep[0].push_front(temp_flow);
+     index[current]=data_rep[0].begin();
+     //find new position and verify
+     position=index.find(current);
+
+     //cout << "inserting new!";
+     //current.print();
+     //cout <<endl;
+     inserted_in_last_sec++;
+
+                                          //next line revisited on sept 16,2006 removed or
+     if(index.end()==position){ //|| !(current.equal_to_flow(&(*(position->second))  ))  ) {
+         cout <<"inserted not found!!";
+         Flow_helpers::print_flow(&temp_flow);
+         exit(1);
+     }
+     //fprintf(stderr,"NOT found in local db!\n");
+         
+  }
+  else{
+     //fprintf(stderr,"found in local db\n");
+     temp_flow=*in_flow;
+  }
+  //now emit flow
+  emit_old_or_update(&(*(position->second)),&temp_flow,&current,sec);
+  flow_receiver->entry_point(&(*(position->second)));
+ 
+  // do splicing..., maybe not?
+  /* 
+  local=position->second;
+  local2=local;
+  local2++;
+  dest_queue=get_flow_class(&(*(position->second)));
+  current_queue=(unsigned int) position->second->annot[FLOW_ANNOT_CLASS_ID].as_int32;
+  if(local!=data_rep[dest_queue].begin()){
+       data_rep[dest_queue].splice(data_rep[dest_queue].begin(),data_rep[current_queue],local,local2);
+       position->second->annot[FLOW_ANNOT_CLASS_ID].as_ptr=(void *)dest_queue;
+  };
+  */
+
+end:
+  rvalue2=pthread_mutex_unlock(&db_mutex);
+  if(0!=rvalue2){perror("Bidir Flow maker: error on mutex un lock,"); exit(1);};
+  return rvalue; 
+}
+
+////////////////////////////////////////////////////////////
 int Bidir_Flow_Maker_Block::DB_updater(Tagged_IP_Packet *in_packet){
  //convert packet into flow,
    //search for flow

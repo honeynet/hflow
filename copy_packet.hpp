@@ -22,6 +22,7 @@ class Copy_Packet : public Tagged_Packet{
       memcpy(annot,in_packet->annot,sizeof(Element_Annotation)*MAX_ANNOT_PER_ELEMENT);
       memcpy(&true_pcap_hdr,in_packet->pcap_hdr,sizeof(struct pcap_pkthdr));
       memcpy(pkt_data,in_packet->data,true_pcap_hdr.caplen);
+      pcap_hdr=&true_pcap_hdr;
       //packet_type=in_packet->get_packet_type();
       return 0;
       };
@@ -30,6 +31,7 @@ class Copy_Packet : public Tagged_Packet{
       memcpy(annot,in_packet->annot,sizeof(Element_Annotation)*MAX_ANNOT_PER_ELEMENT);
       memcpy(&true_pcap_hdr,in_packet->pcap_hdr,sizeof(struct pcap_pkthdr));
       memcpy(pkt_data,in_packet->data,true_pcap_hdr.caplen);
+      pcap_hdr=&true_pcap_hdr;
       //packet_type=in_packet->get_packet_type();
       return 0;
       };
@@ -39,7 +41,7 @@ class Copy_Packet : public Tagged_Packet{
       memcpy(&true_pcap_hdr,in_packet->pcap_hdr,sizeof(struct pcap_pkthdr));
       //memcpy(pkt_data,in_packet->data,in_packet->pcap_hdr->len);
       memcpy(pkt_data,in_packet->data,true_pcap_hdr.len);
-
+      pcap_hdr=&true_pcap_hdr;
       //packet_type=in_packet->get_packet_type();
       return 0;
       };

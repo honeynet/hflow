@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include <dbi/dbi.h>
 #include "pcap_outfile_block.hpp"
@@ -370,10 +371,11 @@ int Snort_Block::initialize(int in_numoutputs,  char* dbtype, char* dbname, char
   snort_output_stream=fdopen(snort_out_read_fd,"r");
   if(NULL==snort_output_stream){perror("Snort block: Cannot reopen snort outfile as stream:");exit(1);}
   //
-  
+  do{
   delay.tv_sec=3;
   delay.tv_nsec=700000000; //a 7/10 of a second should be plenty
-  rvalue=nanosleep(&delay,NULL);
+    rvalue=nanosleep(&delay,NULL);
+  }while(rvalue!=0 && errno!=EINTR);
   if(0!=rvalue) {
      perror("Snort block: error on nanosleep\n");
      exit(1);
@@ -421,6 +423,7 @@ int Snort_Block::entry_point(const Tagged_IP_Packet *in_packet){
   
    //write to pipe_fd[1]...
   pack_vect=(Tagged_Packet *)in_packet;
+  assert(in_packet->pcap_hdr!=NULL);
   pcap_block.entry_point(in_packet);
   //rvalue=fsync(pipe_fd[1]);
   //cout << "flushed snort_block" <<endl;

@@ -38,6 +38,7 @@
 #include <sys/time.h>
 #include <string.h>
 #include <ctype.h>
+#include <assert.h>
 
 #include <dbi/dbi.h>
 #include "pcap_outfile_block.hpp"
@@ -365,6 +366,7 @@ int p0f_Block::entry_point(const Tagged_IP_Packet *in_packet){
         // two options exist... slow down the reader OR use locking I wish I could do without locking
         // the other big assumtion here is the fact that the system reads a whole 32bit word at a time....
 
+      assert(in_packet->pcap_hdr!=NULL);      
       if(current_flow->stats.src.packets<3){
            //last_timestamp_seen=(unsigned int)current_flow->stats.end_time();
            //we only need the initial packets, nothing else is really needed          
@@ -561,7 +563,6 @@ int p0f_Block::internal_collector(){
             //fprintf(stderr, "flow_id=%u\n",flow_db_id);
             #ifdef VERBOSE
             fprintf(stderr,"P0f NOT FOUND: Query='%s'\n",query);
-            #else
             fprintf(stderr,"P0f NOT FOUND iters=%u\n",iterations );
             #endif
             do{

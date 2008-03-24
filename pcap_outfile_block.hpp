@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 
 //next for rotary files
 #include <time.h>  
@@ -37,6 +38,7 @@
 #include "copy_packet.hpp"
 #include <semaphore.h>
 #include <signal.h>
+
 
 
 #define PCAP_FILE_MAGIC 0xa1b2c3d4
@@ -68,6 +70,7 @@ class Pcap_Outfile_Block: public Processing_Block{
     pthread_mutex_t in_queue_mutex;
     sem_t queue_sem;
     sem_t done_sem;
+    sem_t queue_size_sem;
     volatile bool input_done;
     struct timespec delay;
 
@@ -223,6 +226,9 @@ int Pcap_Outfile_Block::initialize_on_open_fd(int in_fd, int linktype){
      rvalue=sem_init(&queue_sem,0, 0);
      if(-1==rvalue){perror("cannot initialize semaphore in pcap_out"); exit(1);}
 
+     rvalue=sem_init(&queue_size_sem,0, 80);
+     if(-1==rvalue){perror("cannot initialize semaphore in pcap_out"); exit(1);}
+
 
      //create the new thread
      rvalue=pthread_create(&pcap_outfile_processing_thread,NULL,pcap_outfile_block_thread_func,(void*)this);
@@ -255,6 +261,8 @@ inline int Pcap_Outfile_Block::write_packet(const Tagged_Packet *in_packet){
 
   //write the header
  //need to convert for multiple portability...
+  assert(NULL!=in_packet);
+  assert(NULL!=in_packet->pcap_hdr);
   packet_header.ts.tv_sec=in_packet->pcap_hdr->ts.tv_sec;
   packet_header.ts.tv_usec=in_packet->pcap_hdr->ts.tv_usec;
   packet_header.caplen=in_packet->pcap_hdr->caplen;
@@ -309,6 +317,8 @@ int Pcap_Outfile_Block::entry_point(const Tagged_Packet *in_packet){
        return write_packet(in_packet);
   else{
       //fprintf(stderr,".");
+      rvalue=sem_wait(&queue_size_sem);
+      if(0!=rvalue){perror("pcap_out: error on queue size wait, entry"); };
       rvalue=pthread_mutex_lock(&in_queue_mutex);
       if(0!=rvalue){perror("pcap out: error on mutex lock, entry"); exit(1);};
       //fprintf(stderr,"-");
@@ -322,7 +332,7 @@ int Pcap_Outfile_Block::entry_point(const Tagged_Packet *in_packet){
       rvalue=sem_post(&queue_sem);
       if(0!=rvalue){perror("pcap_out: error on queue post, entry"); exit(1);};
 
-      if((local_delay.tv_nsec!=0) && (false==false)){
+      if((local_delay.tv_nsec!=0) && (true==false)){
          rvalue=nanosleep(&delay,NULL);
          if(0!=rvalue){perror("pcap out: error on nanosleep, entry"); exit(1);};
       }
@@ -417,10 +427,10 @@ int Pcap_Outfile_Block::internal_collector(){
         rvalue=0;
         do{
           rvalue=sem_wait(&queue_sem);
-          if((0!=rvalue) && (EINTR!=rvalue)){
+          if((0!=rvalue) && (EINTR!=errno)){
               perror("pcap out: error on sem_wat"); exit(1);
             };
-          }while ((rvalue!=0) && (rvalue!=EINTR));
+          }while ((rvalue!=0) && (errno!=EINTR));
 
         if (true==input_done && 1>=list_size){goto normal_end;}
 
@@ -459,6 +469,9 @@ int Pcap_Outfile_Block::internal_collector(){
            }
         }
         else{last_warn_size=0; current_delay.tv_nsec=0;}
+        rvalue=sem_post(&queue_size_sem);
+        if(0!=rvalue){perror("pcap_out: error on queue size post"); exit(1); };
+
 
     }
 normal_end:

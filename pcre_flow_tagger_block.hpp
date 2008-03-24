@@ -150,7 +150,7 @@ class Pcre_Flow_Tagger: public Processing_Block{
     sem_t done_sem;
     volatile bool input_done;
     struct timespec delay;
-
+    int packet_counter;
 
   public:
     inline int entry_point(const Tagged_Element *in_packet){return entry_point((Tagged_IP_Packet *) in_packet);};
@@ -179,6 +179,7 @@ Pcre_Flow_Tagger::Pcre_Flow_Tagger(){
    next_stage=NULL;
    num_outputs=0;
    num_active=0;
+   packet_counter=0;
 };
 
 int Pcre_Flow_Tagger::initialize(int in_numoutputs){
