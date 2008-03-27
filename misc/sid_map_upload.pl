@@ -107,7 +107,7 @@ sub main{
     my $msg;
     my $ref;
    
-    my $query = "insert into ids_sig (sensor_id,ids_sig_id, sig_name, reference) values (?,?,?,?) ";
+    my $query = "insert into ids_sig (sensor_id,ids_sig_id, sig_name, reference,ids_sig_gen) values (?,?,?,?,1) ";
 
     my $sql = $dbh->prepare($query);
  
