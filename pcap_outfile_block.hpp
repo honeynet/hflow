@@ -63,7 +63,8 @@ class Pcap_Outfile_Block: public Processing_Block{
     bool do_rotate;
     bool blocking;
     int fd;
-    static ssize_t Write(int fd, const void* buf,ssize_t count);
+    //static ssize_t Write(int fd, const void* buf,ssize_t count);
+    //static ssize_t Read(int fd, const void* buf,ssize_t count);
 //----
     list <Copy_Packet> packet_queue;
     pthread_t pcap_outfile_processing_thread;
@@ -76,6 +77,9 @@ class Pcap_Outfile_Block: public Processing_Block{
 
 
   public:
+    static ssize_t Write(int fd, const void* buf,ssize_t count);
+    static ssize_t Read(int fd, const void* buf,ssize_t count);
+
     inline int entry_point(const Tagged_Element *in_packet){return entry_point((Tagged_Packet *) in_packet);};
     int entry_point(const Tagged_Packet *in_packet);
     int initialize(const char *out_filename);
@@ -263,6 +267,7 @@ inline int Pcap_Outfile_Block::write_packet(const Tagged_Packet *in_packet){
  //need to convert for multiple portability...
   assert(NULL!=in_packet);
   assert(NULL!=in_packet->pcap_hdr);
+  assert(NULL!=in_packet->data);
   packet_header.ts.tv_sec=in_packet->pcap_hdr->ts.tv_sec;
   packet_header.ts.tv_usec=in_packet->pcap_hdr->ts.tv_usec;
   packet_header.caplen=in_packet->pcap_hdr->caplen;
@@ -322,6 +327,7 @@ int Pcap_Outfile_Block::entry_point(const Tagged_Packet *in_packet){
       rvalue=pthread_mutex_lock(&in_queue_mutex);
       if(0!=rvalue){perror("pcap out: error on mutex lock, entry"); exit(1);};
       //fprintf(stderr,"-");
+      assert(in_packet->pcap_hdr->caplen!=0);
       packet_queue.push_back(*in_packet);
       local_delay=delay;
       rvalue=pthread_mutex_unlock(&in_queue_mutex);
@@ -381,9 +387,9 @@ ssize_t Pcap_Outfile_Block::Write(int fd, const void* buf,ssize_t count){
   char *local_buf=(char*) buf;
   ssize_t last_err=0;
   do{
-     last_write=write(fd,local_buf,count-written);
-     if(-1==last_write && EINTR==errno){
-        last_err=errno;
+     last_write=write(fd,local_buf+written,count-written);
+     if(0>=last_write && EINTR==errno){
+        last_err=EINTR;
         last_write=0;
      }
      if(-1==last_write && EINTR !=errno){
@@ -393,17 +399,52 @@ ssize_t Pcap_Outfile_Block::Write(int fd, const void* buf,ssize_t count){
   }while((written<count) &&  ((last_write>0) || (last_err==EINTR)) );
 
   if(last_write<=0){
+    fprintf(stderr,"last_write %d, last err%d written=%d count=%d\n",last_write,last_err,written,count);
     perror("'Write' failed:");
     return last_write;
   }
   return written;
 };
 
+ssize_t Pcap_Outfile_Block::Read(int fd, const void* buf,ssize_t count){
+  // Writes data to a fd, keeps attempting until all data is writen
+  //  or the call fails. On interrupt, it is able to continue where it
+  //  was interrupted.
+  ssize_t bytes_read=0;
+  ssize_t last_read;
+  char *local_buf=(char*) buf;
+  ssize_t last_err=0;
+  if (0==count){
+    return 0;
+  }
+  do{
+     last_read=read(fd,local_buf+bytes_read,count-bytes_read);
+     if(-1==last_read && EINTR==errno){
+        last_err=EINTR;
+        last_read=0;
+     }
+     if(-1==last_read && EINTR !=errno){
+        perror("write failed");
+     }
+     bytes_read+=last_read;
+  }while((bytes_read<count) &&  ((last_read>0) || (last_err==EINTR)) );
+
+  if(last_read<=0){
+    fprintf(stderr,"last_read %d, last err%d bytes_read=%d count=%d\n",last_read,last_err,bytes_read,count);
+    perror("'Read' failed:");
+    return last_read;
+  }
+  return bytes_read;
+};
+
+
+
 
 int Pcap_Outfile_Block::internal_collector(){
     //this is the body of the sebek processing section
    int rvalue;
    Copy_Packet *in_packet;
+   Copy_Packet queue_packet;
    list<Copy_Packet>::iterator packet_it;
    int list_size=0;
    int last_warn_size=0;
@@ -437,7 +478,10 @@ int Pcap_Outfile_Block::internal_collector(){
         //step2 get handle
         rvalue=pthread_mutex_lock(&in_queue_mutex);
         if(0!=rvalue){perror("pcap_out: error on mutex lock, collector"); exit(1);};
-        in_packet=&(*packet_queue.begin());
+        in_packet=&queue_packet;
+        //in_packet=&(*packet_queue.begin());
+        queue_packet=*packet_queue.begin();
+        
         delay=current_delay;
 
         rvalue=pthread_mutex_unlock(&in_queue_mutex);
@@ -445,8 +489,10 @@ int Pcap_Outfile_Block::internal_collector(){
 
         //setep 3 do db_insert
         //do_version3(in_packet);
+        assert(in_packet->pcap_hdr->caplen!=0);
         write_packet(in_packet);    
-    
+        //write_packet(&queue_packet);    
+
         #ifdef VERBOSE
         fprintf(stderr,".");
         #endif
@@ -459,13 +505,14 @@ int Pcap_Outfile_Block::internal_collector(){
         rvalue=pthread_mutex_unlock(&in_queue_mutex);
         if(0!=rvalue){perror("pcap out: error on mutex unlock, collector"); exit(1);};
 
-        if (list_size>10){
+        if (list_size>20){
            if(list_size>=last_warn_size){
-              #ifdef VERBOSE
-              cout <<"hflow pcre warning: large list size, size=" <<list_size<<endl;
-              #endif
+              //#ifdef VERBOSE
+              cout <<"pcap_out warning: large list size, size=" <<list_size<<endl;
+              //#endif
               last_warn_size=list_size;
-              current_delay.tv_nsec=5000000;
+              current_delay.tv_nsec=2000000;
+              current_delay.tv_nsec=0;
            }
         }
         else{last_warn_size=0; current_delay.tv_nsec=0;}

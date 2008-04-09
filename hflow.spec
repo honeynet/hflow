@@ -1,6 +1,6 @@
 Summary:  Hflow data Coalsesing 
 Name: hflow
-Version: 1.99.22
+Version: 1.99.23
 Release: 1
 License: GPL
 Group:   Applications/Honeynet
@@ -10,7 +10,7 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 Requires: snort
 Requires: p0f 
 Requires: libstdc++
-Requires: libdbi
+Requires: libdbi >= 0.8
 Requires: libdbi-dbd-mysql
 Requires: pcre
 Requires: libpcap

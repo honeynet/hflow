@@ -65,7 +65,7 @@ int usage(){
          "              [-w outfilename [-l size_limit]]\n"
          "              [-d num [-s sensor_num]]\n"
          "              [-D]\n"
-         "              [-z username] "
+         "              [-z username] \n"
          "              [-f bpf_filter]\n\n");
   printf("must include at least one input type and for live options no partial data is printed for now\n");
   return 0;

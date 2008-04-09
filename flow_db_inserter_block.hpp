@@ -157,8 +157,8 @@ Flow_DB_Inserter_Block:: Flow_DB_Inserter_Block(){
     if((false==live_read) && (local_queue_size>6) ){
        delay.tv_sec=0;
        delay.tv_nsec=0000000;
-       if(local_queue_size>8){
-          delay.tv_nsec=10000000;
+       if(local_queue_size>16){
+          delay.tv_nsec=5000000;
           
           if(local_queue_size>40){
              delay.tv_nsec=100000000;
@@ -297,7 +297,7 @@ int Flow_DB_Inserter_Block::internal_collector(){
         rvalue=pthread_mutex_unlock(&in_queue_mutex);
         if(0!=rvalue){perror("error on mutex unlock, collector"); exit(1);};
         
-        if (list_size>10){
+        if (list_size>20){
            if(list_size>=last_warn_size){
               cout <<"warning: large list size, size=" <<list_size<<endl;
               last_warn_size=list_size;

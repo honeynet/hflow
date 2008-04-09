@@ -537,6 +537,17 @@ int Snort_Block::internal_collector(){
      offset=L2_Helpers::is_ipv4(pcap_hdr,(u_char *)pkt_data,data_link,0);
      snort_packet.ip_header_offset=offset;
 
+     //ping the db, as this can be a very long lived connection
+     rvalue=dbi_conn_ping(conn);
+     if(rvalue<=0){
+        //try to manually reconnect
+        fprintf(stderr,"Warning: snort-block: connection seems to be gone!\n");
+        rvalue=dbi_conn_connect(conn);
+        if(rvalue<0){
+            perror("snort-block: connetion closed and cannot reconnect!  "); exit(1);
+        }
+     }
+
      iterations=0;
      while((offset!=-1) && (0==flow_db_id) && (iterations<2) && (1==log_header.event.sig_generator)){
         query[0]=0;

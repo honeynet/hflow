@@ -1,5 +1,5 @@
 AC_INIT(hflow.cpp)
-AM_INIT_AUTOMAKE(hflow,1.99.22)
+AM_INIT_AUTOMAKE(hflow,1.99.23)
 AM_CONFIG_HEADER(config.h)
 
 
