@@ -50,14 +50,27 @@ start)
 	# "pidof" (same mechanism used by "status" from
 	# /etc/rc.d/init.d/functions)
 	cd /etc/hflow
-	/usr/bin/hflow -D -i ${HwLAN_IFACE} -p ${PIDFILE} -d 1   \
-		-s ${HwSENSOR_ID} -z _hflow -L ${LOG_DIR}       \
-                 ${SEBEK_PARMS}
-	if [ $? -eq 0 ]; then
-	  success; echo
-	else
-	   failure; echo
-	fi
+	if [ "x$HwBPF_DISABLE" = "xyes" ]; then
+		/usr/bin/hflow -D -i ${HwLAN_IFACE} -p ${PIDFILE} -d 1   \
+			-s ${HwSENSOR_ID} -z _hflow -L ${LOG_DIR}       \
+                 	${SEBEK_PARMS}
+		if [ $? -eq 0 ]; then
+	  		success; echo
+		else
+	   		failure; echo
+		fi
+   	else
+      		BPF_FILTER=`/hw/bin/createBpfFilter.py`
+		/usr/bin/hflow -D -i ${HwLAN_IFACE} -p ${PIDFILE} -d 1   \
+			-f "${BPF_FILTER}" \
+			-s ${HwSENSOR_ID} -z _hflow -L ${LOG_DIR}       \
+                 	${SEBEK_PARMS}
+		if [ $? -eq 0 ]; then
+	  		success; echo
+		else
+	   		failure; echo
+		fi
+   	fi
 	;;
 
 stop)
