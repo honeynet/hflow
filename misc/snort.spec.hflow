@@ -69,7 +69,7 @@
 
 %define vendor Snort.org
 %define for_distro RPMs
-%define release 7.hflow2
+%define release 9.hflow2
 %define realname snort
 
 # Look for a directory to see if we're building under cAos 
@@ -339,7 +339,7 @@ InstallSnort() {
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT%{SnortRulesDir}
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT/%{_sysconfdir}/snort
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig
-	%__mkdir_p -m 0755 $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d
+#	%__mkdir_p -m 0755 $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT/%{_var}/log/snort
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT%{_initrddir}
 	%__mkdir_p -m 0755 $RPM_BUILD_ROOT%{_mandir}/man8
@@ -365,7 +365,7 @@ InstallSnort() {
 	%__gzip $RPM_BUILD_ROOT%{_mandir}/man8/snort.8
 	%__install -p -m 0755 rpm/snortd $RPM_BUILD_ROOT%{_initrddir}
 	%__install -p -m 0644 rpm/snort.sysconfig $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/%{realname}
-	%__install -p -m 0644 rpm/snort.logrotate $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d/snort
+#	%__install -p -m 0644 rpm/snort.logrotate $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d/snort
 	%__install -p -m 0644 etc/reference.config etc/classification.config \
 		etc/unicode.map etc/gen-msg.map etc/sid-msg.map \
 		etc/threshold.conf etc/snort.conf etc/generators \
@@ -459,14 +459,18 @@ if [ -L %{_sbindir}/snort ] || [ ! -e %{_sbindir}/snort ] ; then \
 	%__rm -f %{_sbindir}/snort; %__ln_s %{_sbindir}/%{name}-plain %{_sbindir}/snort; fi
 
 # We should restart it to activate the new binary if it was upgraded
-%{_initrddir}/snortd condrestart 1>/dev/null 2>/dev/null
+#%{_initrddir}/snortd condrestart 1>/dev/null 2>/dev/null
 
 # Don't do all this stuff if we are upgrading
 if [ $1 = 1 ] ; then
 	%__chown -R snort.snort %{_var}/log/snort
-	/sbin/chkconfig --add snortd
+#	/sbin/chkconfig --add snortd
 fi
 
+# If we are upgrading, this probably means that hflow2 is already installed
+if [ $1 = 2 ]; then
+	%{_initrddir}/hflow restart
+fi
 
 %preun
 if [ $1 = 0 ] ; then
@@ -524,7 +528,7 @@ fi
 %attr(0644,root,root) %config(noreplace) %{_sysconfdir}/snort/threshold.conf
 %attr(0644,root,root) %config(noreplace) %{_sysconfdir}/snort/*.map
 %attr(0644,root,root) %config(noreplace) %{_sysconfdir}/snort/generators
-%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/logrotate.d/snort
+#%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/logrotate.d/snort
 %attr(0644,root,root) %config(noreplace) %{_sysconfdir}/snort/snort.conf
 %attr(0644,root,root) %config(noreplace) %{_sysconfdir}/sysconfig/snort
 %attr(0755,root,root) %config(noreplace) %{_initrddir}/snortd
@@ -586,6 +590,10 @@ fi
 #	Vlatko Kosturjak <kost@linux.hr>
 
 %changelog
+* Wed Apr 16 2008 Rob McMillen <rvmcmil@gmail.com> 
+- Removed logrotate file to avoid restarting snort without hflow knowing.
+- Removed startup script because hflow spawns it.
+
 * Wed Feb 28 2007 Steve Sturges <ssturges@sourcefire.com> 2.6.1
 - Removed smp flags to make command
 
