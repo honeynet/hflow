@@ -21,6 +21,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <pwd.h>
+#include <arpa/inet.h>
 
 #include "element.h"
 #include "frag_drop.hpp"
@@ -66,7 +67,9 @@ int usage(){
          "              [-d num [-s sensor_num]]\n"
          "              [-D]\n"
          "              [-z username] \n"
-         "              [-f bpf_filter]\n\n");
+         "              [-f bpf_filter]\n"
+         "              [-n local network address (default = 0)]\n"
+         "              [-b local network bitmask (default = 32)]\n\n");
   printf("must include at least one input type and for live options no partial data is printed for now\n");
   return 0;
 }
@@ -141,6 +144,8 @@ int main(int argc,char **argv)
  char *run_username=NULL;
  struct passwd *pw;
  uint16_t sebek_dst_port=1101;
+ int network = 0;
+ int bitmask = 32;
 
        /* set up the handler */
         if (signal(SIGINT, sigint_handler) == SIG_ERR) {
@@ -151,9 +156,10 @@ int main(int argc,char **argv)
  log_dir=default_logdir;
  conf_dir=default_logdir; 
  //cout << "hello world"<<endl;
+ 
 
  //get options and initialize the variables
- while ((r = getopt(argc, argv, "hVDSTi:r:u:w:d:E:l:s:f:L:C:z:p:k:")) != -1){
+ while ((r = getopt(argc, argv, "hVDSTi:r:u:w:d:E:l:s:f:L:C:z:p:k:n:b:")) != -1){
 
       switch(r){
         case 'V':version_info();
@@ -204,9 +210,25 @@ int main(int argc,char **argv)
                   break;
         case 'k': sebek_dst_port=atoi(optarg);
                   break;
-
+        case 'n':
+                  network = inet_network(optarg);
+                  if (network == -1)
+                  {
+                     network = 0;
+                  }
+                  break;
+        case 'b':
+                  bitmask = atoi(optarg);
+                  if ( (bitmask < 0) || (bitmask > 32) )
+                  {
+                     bitmask = 32;
+                  }
+                  break;
         }
  }
+
+ db_inserter.initialize_local_network(network, bitmask);
+
  //check options and send user to usage if something is not quite correct
  if(num_inputs!=1){
     usage();

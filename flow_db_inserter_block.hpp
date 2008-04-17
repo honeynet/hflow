@@ -64,6 +64,9 @@ class Flow_DB_Inserter_Block: public Processing_Block{
     volatile int queue_size;
     bool db_id_added_to_flow;
     unsigned int sensor_id;
+    unsigned int cur_secs;
+    unsigned int local_network;
+    unsigned int local_netmask;
     //int initialized;
 public:
   public:
@@ -78,6 +81,7 @@ public:
     int set_output_point(Processing_Block *out_block);
     int initialize(int in_numoutputs,char* dbtype, char* dbname, char* username,char *password);
     int initialize(int in_numoutputs,char* dbtype, char* dbname, char* username,char *password,unsigned int in_sensor_id);
+    int initialize_local_network(unsigned int network, int bitmask);
 
     int DB_updater(Tagged_IP_Packet *in_packet);
     Flow_DB_Inserter_Block();
@@ -88,6 +92,7 @@ public:
     int db_flow_insert_mysql(Tagged_IPV4_Flow *in_flow);
     int db_sensor_update(Tagged_IPV4_Flow *in_flow);
     unsigned int set_sensor_id(const unsigned int in_id){sensor_id=in_id; return sensor_id;};
+    bool isLocalNetwork(unsigned int addr);
 };
 
 void *db_inserter_thread_func(void *inblock)
@@ -100,11 +105,32 @@ void *db_inserter_thread_func(void *inblock)
 
 /////////////////////////////////////
 ////////Class implementation
+int Flow_DB_Inserter_Block:: initialize_local_network(unsigned int network, 
+                                                      int bitmask)
+{
+   local_netmask = (local_netmask << (32 - bitmask));
+   local_network = (network & local_netmask);
+   
+   return 0;
+}
+
+bool Flow_DB_Inserter_Block:: isLocalNetwork(unsigned int addr)
+{
+   unsigned int network = (addr & local_netmask);
+   if (network == local_network)
+   {
+      return true;
+   }
+   return false;
+}
 
 Flow_DB_Inserter_Block:: Flow_DB_Inserter_Block(){
   initialized=false;
   sensor_id=0;
   queue_size=0;
+  cur_secs = 0;
+  local_network = 0;
+  local_netmask = 0xFFFFFFFF;
  };
 //
  Flow_DB_Inserter_Block::~ Flow_DB_Inserter_Block(){
@@ -289,8 +315,12 @@ int Flow_DB_Inserter_Block::internal_collector(){
 #else
         db_flow_insert(current_flow);
 #endif
-	///update sensor table
- 	db_sensor_update(current_flow);
+	///update sensor table if required
+        if (current_flow->stats.src.end_time > cur_secs)
+        {
+ 	    db_sensor_update(current_flow);
+            cur_secs = current_flow->stats.src.end_time;
+        }
 
         ///step 5 delete
         rvalue=pthread_mutex_lock(&in_queue_mutex);
@@ -334,7 +364,7 @@ int Flow_DB_Inserter_Block::db_sensor_update(Tagged_IPV4_Flow *in_flow){
 ///////
 int Flow_DB_Inserter_Block::db_flow_insert(Tagged_IPV4_Flow *in_flow){//should be renamed mysql insert!!
    static char *section1="INSERT INTO flow"
-                "(sensor_id, "
+                "(sensor_id, is_local, "
                 " src_ip,dst_ip,src_port,dst_port,ip_proto,"
                 " src_start_sec,src_start_msec,src_end_sec,src_end_msec,"
                 " src_packets,src_bytes,src_ip_flags,src_tcp_flags,src_icmp_packets,src_icmp_seen,"
@@ -352,6 +382,7 @@ int Flow_DB_Inserter_Block::db_flow_insert(Tagged_IPV4_Flow *in_flow){//should b
    unsigned int flow_db_id; 
    unsigned int last_time;
    unsigned int curr_packet_size;
+   int local = 0;
   
    db_id_added_to_flow=false;
 
@@ -501,11 +532,15 @@ int Flow_DB_Inserter_Block::db_flow_insert(Tagged_IPV4_Flow *in_flow){//should b
         else{
           //Not found, do a regular insert, but first free the result
            rvalue=dbi_result_free(result);
+           if (isLocalNetwork(in_flow->source_ip))
+           {
+              local = 1;
+           }
 
            snprintf(query, 10000,
                  "%s (%u,  %u,%u,%u,%u,%u,    %u,%u,%u,%u, %u,%u,%u,%u,%u,%u,%u,  %u,%u,%u,%u, %u,%u,%u,%u,%u,%u  )",
                   section1,
-                  sensor_id,
+                  sensor_id, local,
                   in_flow->source_ip,in_flow->dest_ip,in_flow->src_port,in_flow->dst_port, in_flow->protocol,
                   in_flow->stats.src.start_time,in_flow->stats.src.start_msec,
                   in_flow->stats.src.end_time,in_flow->stats.src.end_msec,
@@ -591,7 +626,7 @@ int Flow_DB_Inserter_Block::db_flow_insert(Tagged_IPV4_Flow *in_flow){//should b
 ///////
 int Flow_DB_Inserter_Block::db_flow_insert_mysql(Tagged_IPV4_Flow *in_flow){//should be renamed mysql insert!!
    static char *section1="INSERT INTO flow"
-                "(sensor_id, "
+                "(sensor_id, is_local, "
                 " src_ip,dst_ip,src_port,dst_port,ip_proto,"
                 " src_start_sec,src_start_msec,src_end_sec,src_end_msec,"
                 " src_packets,src_bytes,src_ip_flags,src_tcp_flags,src_icmp_packets,src_icmp_seen,"
@@ -609,13 +644,18 @@ int Flow_DB_Inserter_Block::db_flow_insert_mysql(Tagged_IPV4_Flow *in_flow){//sh
    unsigned int flow_db_id; 
    unsigned int last_time;
    unsigned int curr_packet_size;
+   int local = 0;
   
    db_id_added_to_flow=false;
 
    if (0==in_flow->annot[FLOW_ANNOT_DB_ID].as_int32){ //no db id known, do an insert
 
+        if (isLocalNetwork(in_flow->source_ip))
+        {
+           local = 1;
+        }
         snprintf(query, 10000,
-                 "%s (%u,  %u,%u,%u,%u,%u,    %u,%u,%u,%u, %u,%u,%u,%u,%u,%u,%u,  %u,%u,%u,%u, %u,%u,%u,%u,%u,%u  )"
+                 "%s (%u, %d, %u,%u,%u,%u,%u,    %u,%u,%u,%u, %u,%u,%u,%u,%u,%u,%u,  %u,%u,%u,%u, %u,%u,%u,%u,%u,%u  )"
                  " ON DUPLICATE KEY UPDATE src_end_sec=%u,src_end_msec=%u,"
                  "src_packets=%u,src_bytes=%u,src_ip_flags=%u,src_tcp_flags=%u,src_icmp_packets=%u,src_icmp_seen=%u,"
                  "dst_start_sec=%u,dst_start_msec=%u,dst_end_sec=%u,dst_end_msec=%u,"
@@ -623,6 +663,7 @@ int Flow_DB_Inserter_Block::db_flow_insert_mysql(Tagged_IPV4_Flow *in_flow){//sh
                  "marker_flags=%u",
                   section1,
                   sensor_id,
+                  local,
                   in_flow->source_ip,in_flow->dest_ip,in_flow->src_port,in_flow->dst_port, in_flow->protocol,
                   in_flow->stats.src.start_time,in_flow->stats.src.start_msec,
                   in_flow->stats.src.end_time,in_flow->stats.src.end_msec,

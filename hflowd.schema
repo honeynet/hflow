@@ -157,6 +157,7 @@ CREATE TABLE flow (
 
         client_os_id        INT         UNSIGNED NOT NULL DEFAULT 0,
         server_os_id	    INT 	UNSIGNED NOT NULL DEFAULT 0,
+        is_local        TINYINT    UNSIGNED NOT NULL DEFAULT 0,
 
         PRIMARY KEY   ( sensor_id,flow_id ),
         INDEX src_ip_idx  (sensor_id,src_ip),

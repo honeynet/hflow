@@ -1,7 +1,7 @@
 Summary:  Hflow data Coalsesing 
 Name: hflow
-Version: 1.99.24
-Release: 2
+Version: 1.99.25
+Release: 3
 License: GPL
 Group:   Applications/Honeynet
 URL:     http://project.honeynet.org/tools/download/walleye-%{version}-%{release}.tar.gz 
