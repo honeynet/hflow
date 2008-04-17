@@ -1,7 +1,7 @@
 Summary:  Hflow data Coalsesing 
 Name: hflow
-Version: 1.99.23
-Release: 1
+Version: 1.99.24
+Release: 2
 License: GPL
 Group:   Applications/Honeynet
 URL:     http://project.honeynet.org/tools/download/walleye-%{version}-%{release}.tar.gz 
@@ -168,10 +168,11 @@ fi
 
 
 if [ $1 -ge 2 ]; then
-        #--- upgrade, dont create new ssl key, and we dont even need to restart httpd 
-        #/sbin/service walleye-httpd condrestart
-#	chown apache %{walleye}/images
-echo "nothing here"
+        #--- upgrade 
+	if [ -e "/var/run/hflow/hflow.pid" ]
+	then
+		/etc/init.d/hflow restart
+	fi
 fi
 
 %postun

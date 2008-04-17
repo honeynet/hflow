@@ -86,6 +86,7 @@ public:
     int internal_collector(); //should never come back!
     int db_flow_insert(Tagged_IPV4_Flow *in_flow);
     int db_flow_insert_mysql(Tagged_IPV4_Flow *in_flow);
+    int db_sensor_update(Tagged_IPV4_Flow *in_flow);
     unsigned int set_sensor_id(const unsigned int in_id){sensor_id=in_id; return sensor_id;};
 };
 
@@ -288,6 +289,9 @@ int Flow_DB_Inserter_Block::internal_collector(){
 #else
         db_flow_insert(current_flow);
 #endif
+	///update sensor table
+ 	db_sensor_update(current_flow);
+
         ///step 5 delete
         rvalue=pthread_mutex_lock(&in_queue_mutex);
         if(0!=rvalue){perror("error on mutex lock, collector"); exit(1);};     
@@ -309,6 +313,22 @@ int Flow_DB_Inserter_Block::internal_collector(){
 
    }
    return 0;
+}
+
+int Flow_DB_Inserter_Block::db_sensor_update(Tagged_IPV4_Flow *in_flow){
+   char query[1000];
+   dbi_result result;
+   int rvalue =- 1;
+
+   snprintf(query, 1000,
+            "UPDATE sensor SET last_upd_sec = %u WHERE sensor_id = %u",
+            in_flow->stats.src.end_time, sensor_id);
+   result = dbi_conn_query(conn,query);
+   if (result)
+   {
+      dbi_result_free(result);
+   }
+   return 0;  
 }
 
 ///////
