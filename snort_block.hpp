@@ -594,7 +594,8 @@ int Snort_Block::internal_collector(){
                       }
                       else{
                          delay.tv_sec=0;
-                         delay.tv_nsec=100000000; //need some better heuristic!!!
+                         //delay.tv_nsec=100000000; //need some better heuristic!!!
+                         delay.tv_nsec=20000 +iterations*40000000;
                       }
                       rvalue=dbi_result_free(result);
 
@@ -637,7 +638,8 @@ int Snort_Block::internal_collector(){
             }//end switch
         //if not found, sleep!
         if(0==flow_db_id ){
-            fprintf(stderr, "flow_id=%u\n",flow_db_id);
+            //fprintf(stderr, "flow_id=%u\n",flow_db_id);
+            fprintf(stderr, "snort iterations=%u\n",iterations);
             fprintf(stderr,"NOT FOUND: Query='%s'\n",query);
             do{
                rvalue=nanosleep(&delay,NULL);

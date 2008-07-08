@@ -61,7 +61,7 @@ inline int L2_Helpers::is_ipv4(const struct pcap_pkthdr* pcap_hdr,const u_char *
 ////////functions for different l2 types go here
 ///////Functions for different l2 types go HERE
 inline int L2_Helpers::is_ipv4_DLT_EN10MB(const struct pcap_pkthdr* pcap_hdr, const u_char *packet, short offset ){
-    short *type_test_loc;
+    uint16_t *type_test_loc;
     //check length
     // min length is 29: ethernet 14 bytes + 5 min for ipv4
     if(      ((pcap_hdr->caplen-offset)< 19) ||((pcap_hdr->len-offset)< 19)   ){
@@ -69,7 +69,7 @@ inline int L2_Helpers::is_ipv4_DLT_EN10MB(const struct pcap_pkthdr* pcap_hdr, co
     }
     //check if ip
     // l2 type, ipv4, and minimum ip header length.
-    type_test_loc=(short *)((char *)(packet+12+offset));
+    type_test_loc=(uint16_t *)((char *)(packet+12+offset));
     if(0x0800!=ntohs(*type_test_loc) || (0x40 != (packet[14+offset] & 0xf0)) || (5>(packet[14+offset] & 0x0f)) ){
        return -1;
     }

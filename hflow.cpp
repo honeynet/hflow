@@ -276,7 +276,7 @@ int main(int argc,char **argv)
             }
 
 
-            sleep(6);
+            sleep(10);
             #ifdef VERBOSE
             fprintf(stdout, "looks like initialization was a success\n");   
             #endif

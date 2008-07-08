@@ -524,6 +524,19 @@ int p0f_Block::internal_collector(){
 */
      flow_db_id=0;
      iterations=0;
+
+     //ping the db, as this can be a very long lived connection
+     rvalue=dbi_conn_ping(conn);
+     if(rvalue<=0){
+        //try to manually reconnect
+        fprintf(stderr,"Warning: snort-block: connection seems to be gone!\n");
+        rvalue=dbi_conn_connect(conn);
+        if(rvalue<0){
+            perror("snort-block: connetion closed and cannot reconnect!  "); exit(1);         }
+     }
+
+
+
      //while commented for now, will go back in
      while((decoded>=0) && (0==flow_db_id) && (iterations<2) ){
         query[0]=0;
